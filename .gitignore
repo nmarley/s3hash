@@ -1,2 +1,6 @@
 # Cargo/Rust artifacts
 /target
+
+# ignore data/ and ignore/
+data/
+ignore/

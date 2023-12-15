@@ -1,20 +1,13 @@
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::{Client, Error};
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use tokio::io::AsyncReadExt;
-use tokio::sync::{mpsc, Semaphore};
 
 #[derive(Clone, Debug)]
 pub struct S3Agent {
     bucket: String,
     prefix: Option<String>,
     client: Client,
-}
-
-lazy_static! {
-    static ref NUM_CORES: usize = num_cpus::get_physical();
 }
 
 // see:
@@ -42,7 +35,7 @@ impl S3Agent {
             None => key.to_owned(),
         });
 
-        debug!("downloading {} from s3", key);
+        // debug!("downloading {} from s3", key);
 
         let object = self
             .client
@@ -60,6 +53,10 @@ impl S3Agent {
         Ok(data)
     }
 
+    // note: This was added as a sanity check, ensure we can see the bucket
+    // before trying to download a shit-ton of files... or handle 'NoSuchBucket'
+    // error and abort if we get one upon trying to get_object
+
     #[allow(dead_code)]
     /// Example method to list all buckets, needs s3 iam permission
     pub async fn list_buckets(&self) -> Result<Vec<String>, aws_sdk_s3::Error> {
@@ -70,50 +67,5 @@ impl S3Agent {
             .map(|e| e.name().unwrap().to_string())
             .collect();
         Ok(buckets)
-    }
-
-    pub async fn batch_get_objects(
-        &self,
-        keys: &Vec<String>,
-    ) -> tokio::io::Result<HashMap<String, Vec<u8>>> {
-        let mut results = HashMap::new();
-
-        let semaphore = Arc::new(Semaphore::new(*NUM_CORES));
-        let (tx, mut rx) = mpsc::channel(*NUM_CORES);
-
-        for k in keys {
-            let permit = semaphore.clone().acquire_owned().await.unwrap();
-
-            let tx = tx.clone();
-            let key = k.to_owned();
-
-            let agent_clone = self.clone();
-            tokio::spawn(async move {
-                // TODO?: handle NoSuchKey?
-                match agent_clone.get_object(&key).await {
-                    Ok(bytes) => {
-                        // Send the result back
-                        if let Err(e) = tx.send((key, bytes)).await {
-                            debug!("Got channel send error: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Got error getting object {} from s3: {}", key, e);
-                    }
-                };
-                // Release the permit
-                drop(permit);
-            });
-        }
-
-        // All tasks are spawned, so we can drop the original sender
-        drop(tx);
-
-        while let Some((key, bytes)) = rx.recv().await {
-            debug!("Got bytes for {}", key);
-            results.insert(key, bytes);
-        }
-
-        tokio::io::Result::Ok(results)
     }
 }
