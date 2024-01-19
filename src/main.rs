@@ -62,8 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an object to interact with s3
     let s3agent = S3Agent::new(&args.s3_bucket, args.s3_prefix.as_deref()).await;
 
-    // Track number of hashes written to output file (see also note below)
+    // Track number of hashes written to output file, and total bytes hashed
     let mut count_hashes_written: u64 = 0;
+    let mut total_bytes_hashed: u64 = 0;
     let num_workers = match args.num_threads {
         Some(num) => num,
         // Use twice the number of cores as the default channel buffer size
@@ -97,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Create a channel for sending results from the workers to the output task
-    let (writer_tx, mut writer_rx) = mpsc::channel::<(String, Vec<u8>)>(num_workers);
+    let (writer_tx, mut writer_rx) = mpsc::channel::<(String, Vec<u8>, usize)>(num_workers);
 
     // Open the output file (the output task will take ownership of this)
     let mut outfh = tokio::fs::OpenOptions::new()
@@ -108,17 +109,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a oneshot channel for sending the count of written hashes from the
     // output task back to the main task once it's finished
-    let (count_tx, count_rx) = oneshot::channel::<u64>();
+    let (count_tx, count_rx) = oneshot::channel::<(u64, u64)>();
 
     // Spawn a task to read results from the workers and write them to the
     // output file
     let output_handle = tokio::spawn(async move {
-        while let Some((key, hash)) = writer_rx.recv().await {
+        while let Some((key, hash, bytes_len)) = writer_rx.recv().await {
             // Write key + hash to a CSV output file in the format that psql can
             // read and insert into a table
             let str_out = format!("{},\\\\x{}\n", key, hex::encode(hash));
             match outfh.write_all(str_out.as_bytes()).await {
                 Ok(_) => {
+                    total_bytes_hashed += bytes_len as u64;
                     count_hashes_written += 1;
                 }
                 Err(e) => {
@@ -128,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // Send the count of hashes written to the output file back to the main
         // task
-        let _ = count_tx.send(count_hashes_written);
+        let _ = count_tx.send((count_hashes_written, total_bytes_hashed));
     });
 
     // Create a vec to hold the handles for the worker + output tasks
@@ -147,10 +149,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Fetch the object bytes from s3
                 match s3agent.get_object(key).await {
                     Ok(bytes) => {
+                        let bytes_len = bytes.len();
                         let hash = sha256(&bytes);
                         // Send the results to the output channel for appending
                         // to the outfile
-                        if writer_tx.send((key.to_owned(), hash)).await.is_err() {
+                        if writer_tx
+                            .send((key.to_owned(), hash, bytes_len))
+                            .await
+                            .is_err()
+                        {
                             error!("error sending result back to channel");
                         }
                     }
@@ -174,14 +181,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     futures::future::join_all(handles).await;
 
     // Attempt to fetch the count of entries written to the output file
-    let hashes_written = match count_rx.await {
-        Ok(count) => count.to_string(),
-        Err(_e) => "some".to_string(),
+    let (count_hashes_written, count_bytes_hashed) = match count_rx.await {
+        Ok((count_hashes, count_bytes_hashed)) => {
+            (count_hashes.to_string(), count_bytes_hashed.to_string())
+        }
+        Err(_e) => ("some".to_string(), "some".to_string()),
     };
 
     info!(
-        "{} finished, wrote {} hashes to {}",
-        bin_name, hashes_written, DEFAULT_OUTFILE,
+        "{} finished, wrote {} hashes ({} bytes) to {}",
+        bin_name, count_hashes_written, count_bytes_hashed, DEFAULT_OUTFILE,
     );
 
     Ok(())
