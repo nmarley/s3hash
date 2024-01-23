@@ -1,3 +1,4 @@
+use aws_sdk_s3::Error;
 use clap::Parser;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
@@ -161,8 +162,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             error!("error sending result back to channel");
                         }
                     }
+                    // note: This cannot actually be caught right now because
+                    // the SDK is broken, open issue:
+                    // https://github.com/awslabs/aws-sdk-rust/issues/501
+                    //
+                    // ...so 'til the SDK is fixed, it will fall thru to the
+                    // lower err match arm
+                    Err(Error::NoSuchBucket(e)) => {
+                        // TODO: probably want to abort the entire process here
+                        // if no such bucket
+                        debug!("Got an S3 NoSuchBucket error!! {}", e);
+                    }
+                    Err(Error::NoSuchKey(e)) => {
+                        debug!("Got an S3 NoSuchKey error for key: '{}', {}", key, e);
+                    }
                     Err(e) => {
-                        error!("error getting object from s3: {}", e);
+                        error!("Got an S3 Error for key: '{}', {}", key, e);
                     }
                 };
             }
