@@ -68,8 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut total_bytes_hashed: u64 = 0;
     let num_workers = match args.num_threads {
         Some(num) => num,
-        // Use twice the number of cores as the default channel buffer size
-        None => *NUM_CORES * 2,
+        // Use 8x the number of cores as the default channel buffer size
+        None => *NUM_CORES * 8,
     };
 
     // Create an mpmc channel for streaming lines from the input file into

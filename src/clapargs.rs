@@ -15,7 +15,7 @@ pub struct Args {
     /// The input file from which to read s3 keys
     #[arg(long)]
     pub keys_file: String,
-    /// The number of threads to use (defaults to NUM_CPUS * 2)
+    /// The number of threads to use (defaults to NUM_CPUS * 8)
     #[arg(long)]
     pub num_threads: Option<usize>,
 }
