@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ColorChoice::Auto,
         ),
         WriteLogger::new(
-            LevelFilter::Debug,
+            LevelFilter::Info,
             Config::default(),
             fs::File::create(DEFAULT_LOGFILE)?,
         ),
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 })
                 .await;
-            // debug!("CLOSING INPUT CHANNEL");
+            // Close input channel
             tx.close();
         }
     });
@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     count_hashes_written += 1;
                 }
                 Err(e) => {
-                    debug!("error writing sha256 hash to outfile: {}", e);
+                    error!("error writing sha256 hash to outfile: {}", e);
                 }
             }
         }
@@ -171,17 +171,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(Error::NoSuchBucket(e)) => {
                         // TODO: probably want to abort the entire process here
                         // if no such bucket
-                        debug!("Got an S3 NoSuchBucket error!! {}", e);
+                        error!("Got an S3 NoSuchBucket error!! {}", e);
                     }
                     Err(Error::NoSuchKey(e)) => {
-                        debug!("Got an S3 NoSuchKey error for key: '{}', {}", key, e);
+                        error!("Got an S3 NoSuchKey error for key: '{}', {}", key, e);
                     }
                     Err(e) => {
                         error!("Got an S3 Error for key: '{}', {}", key, e);
                     }
                 };
             }
-            // debug!("DROPPING WRITER CHANNEL TX");
+            // Drop this worker's cloned writer channel tx
             drop(writer_tx);
         });
         // Add to the vec of handles so we can wait for all the workers to

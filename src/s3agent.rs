@@ -35,8 +35,6 @@ impl S3Agent {
             None => key.to_owned(),
         });
 
-        // debug!("downloading {} from s3", key);
-
         let object = self
             .client
             .get_object()
