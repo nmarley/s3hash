@@ -2,7 +2,7 @@ use clap::Parser;
 
 // command-line arguments are defined here
 
-/// s3checksummer - calculate the sha256 hashes of s3 objects
+/// s3hash - calculate the sha256 hashes of s3 objects
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {

@@ -21,7 +21,7 @@ use s3agent::S3Agent;
 
 // "DEFAULT" is a misnomer, these are the only filenames that will be used
 const DEFAULT_OUTFILE: &str = "s3hashes.csv";
-const DEFAULT_LOGFILE: &str = "s3checksummer.log";
+const DEFAULT_LOGFILE: &str = "s3hash.log";
 
 // lazy static is used to only retrieve the number of cores once
 lazy_static! {

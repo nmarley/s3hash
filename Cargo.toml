@@ -1,5 +1,5 @@
 [package]
-name = "s3checksummer"
+name = "s3hash"
 version = "0.1.0"
 edition = "2021"
 
